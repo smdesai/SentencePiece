@@ -1,5 +1,6 @@
 #!/bin/bash
 # Build SentencePiece as an XCFramework for Swift integration
+# Targets: iOS arm64, iOS Simulator arm64, macOS arm64
 
 set -e
 
@@ -10,41 +11,56 @@ fi
 
 cd sentencepiece
 
-# Create build directories
-mkdir -p build-ios build-macos
+# Patch CMakeLists.txt to define set_xcode_property if not using Xcode generator
+# This is needed because the macro is only defined in the ios.toolchain.cmake but
+# only available when using the Xcode generator
+if ! grep -q "macro(set_xcode_property" src/CMakeLists.txt; then
+    sed -i.bak '1i\
+# Define set_xcode_property macro if not defined (for non-Xcode generators)\
+if(NOT COMMAND set_xcode_property)\
+  macro(set_xcode_property TARGET XCODE_PROPERTY XCODE_VALUE XCODE_RELVERSION)\
+    # No-op when not using Xcode\
+  endmacro()\
+endif()\
+' src/CMakeLists.txt
+fi
 
-# Build for macOS
-echo "Building for macOS..."
-cd build-macos
-cmake .. -DCMAKE_BUILD_TYPE=Release \
-         -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
-         -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
-         -DCMAKE_CXX_STANDARD=17 \
-         -DSPM_ENABLE_SHARED=OFF \
-         -DSPM_ENABLE_TCMALLOC=OFF
+# Create build directories
+mkdir -p build-ios-arm64 build-ios-sim-arm64 build-macos-arm64
+
+# Common CMake flags
+COMMON_FLAGS="-DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_CXX_STANDARD=17 \
+              -DSPM_ENABLE_SHARED=OFF \
+              -DSPM_ENABLE_TCMALLOC=OFF"
+
+# Build for macOS arm64
+echo "Building for macOS arm64..."
+cd build-macos-arm64
+cmake .. $COMMON_FLAGS \
+         -DCMAKE_OSX_ARCHITECTURES="arm64" \
+         -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
 make -j8
 cd ..
 
-# Build for iOS using Xcode generator
-echo "Building for iOS..."
-cd build-ios
-cmake .. -G Xcode \
+# Build for iOS arm64 (device)
+echo "Building for iOS arm64..."
+cd build-ios-arm64
+cmake .. $COMMON_FLAGS \
          -DCMAKE_TOOLCHAIN_FILE=../cmake/ios.toolchain.cmake \
-         -DPLATFORM=OS64COMBINED \
-         -DSPM_ENABLE_SHARED=OFF \
-         -DSPM_ENABLE_TCMALLOC=OFF
+         -DPLATFORM=OS64 \
+         -DDEPLOYMENT_TARGET=14.0
+make -j8
+cd ..
 
-# Build using xcodebuild instead of make
-xcodebuild -project sentencepiece.xcodeproj \
-           -scheme ALL_BUILD \
-           -configuration Release \
-           -sdk iphoneos
-
-# Also build for iOS Simulator
-xcodebuild -project sentencepiece.xcodeproj \
-           -scheme ALL_BUILD \
-           -configuration Release \
-           -sdk iphonesimulator
+# Build for iOS Simulator arm64
+echo "Building for iOS Simulator arm64..."
+cd build-ios-sim-arm64
+cmake .. $COMMON_FLAGS \
+         -DCMAKE_TOOLCHAIN_FILE=../cmake/ios.toolchain.cmake \
+         -DPLATFORM=SIMULATORARM64 \
+         -DDEPLOYMENT_TARGET=14.0
+make -j8
 cd ..
 
 # Create framework structure
@@ -110,38 +126,30 @@ EOF
 # Create XCFramework
 echo "Creating XCFramework..."
 
-# Find the iOS libraries (Xcode puts them in different locations)
-IOS_LIB_PATH=""
-IOS_SIM_LIB_PATH=""
+# Library paths for each platform
+MACOS_LIB_PATH="build-macos-arm64/src/libsentencepiece.a"
+IOS_LIB_PATH="build-ios-arm64/src/libsentencepiece.a"
+IOS_SIM_LIB_PATH="build-ios-sim-arm64/src/libsentencepiece.a"
 
-# Check common locations for iOS device library
-for path in "build-ios/src/Release-iphoneos/libsentencepiece.a" \
-            "build-ios/src/sentencepiece-static/Release-iphoneos/libsentencepiece.a" \
-            "build-ios/Release-iphoneos/libsentencepiece.a"; do
-    if [ -f "$path" ]; then
-        IOS_LIB_PATH="$path"
-        echo "Found iOS library at: $path"
-        break
+# Verify all libraries exist
+for lib in "$MACOS_LIB_PATH" "$IOS_LIB_PATH" "$IOS_SIM_LIB_PATH"; do
+    if [ ! -f "$lib" ]; then
+        echo "Error: Library not found at $lib"
+        exit 1
     fi
 done
 
-# Check common locations for iOS simulator library
-for path in "build-ios/src/Release-iphonesimulator/libsentencepiece.a" \
-            "build-ios/src/sentencepiece-static/Release-iphonesimulator/libsentencepiece.a" \
-            "build-ios/Release-iphonesimulator/libsentencepiece.a"; do
-    if [ -f "$path" ]; then
-        IOS_SIM_LIB_PATH="$path"
-        echo "Found iOS Simulator library at: $path"
-        break
-    fi
-done
+echo "Found all libraries:"
+echo "  macOS: $MACOS_LIB_PATH"
+echo "  iOS: $IOS_LIB_PATH"
+echo "  iOS Simulator: $IOS_SIM_LIB_PATH"
 
 # First, remove any existing XCFramework
 rm -rf "../SentencePiece.xcframework"
 
 # Create temporary directories for each platform's framework
 mkdir -p temp-frameworks/macos
-mkdir -p temp-frameworks/ios  
+mkdir -p temp-frameworks/ios
 mkdir -p temp-frameworks/ios-sim
 
 MAC_FRAMEWORK="temp-frameworks/macos/${FRAMEWORK_NAME}.framework"
@@ -194,45 +202,19 @@ PLIST
 
 # Create platform-specific frameworks
 echo "Creating platform-specific frameworks..."
-create_platform_framework "build-macos/src/libsentencepiece.a" "$MAC_FRAMEWORK"
+create_platform_framework "$MACOS_LIB_PATH" "$MAC_FRAMEWORK"
+create_platform_framework "$IOS_LIB_PATH" "$IOS_FRAMEWORK"
+create_platform_framework "$IOS_SIM_LIB_PATH" "$IOS_SIM_FRAMEWORK"
 
-# Create XCFramework based on what we found
-if [ -n "$IOS_LIB_PATH" ] && [ -n "$IOS_SIM_LIB_PATH" ]; then
-    create_platform_framework "$IOS_LIB_PATH" "$IOS_FRAMEWORK"
-    create_platform_framework "$IOS_SIM_LIB_PATH" "$IOS_SIM_FRAMEWORK"
-    
-    # All platforms: macOS, iOS device, iOS simulator
-    echo "Creating XCFramework with macOS, iOS device, and iOS simulator..."
-    xcodebuild -create-xcframework \
-        -framework "$MAC_FRAMEWORK" \
-        -framework "$IOS_FRAMEWORK" \
-        -framework "$IOS_SIM_FRAMEWORK" \
-        -output "../SentencePiece.xcframework"
-        
-    # Clean up temporary frameworks
-    rm -rf temp-frameworks
-elif [ -n "$IOS_LIB_PATH" ]; then
-    create_platform_framework "$IOS_LIB_PATH" "$IOS_FRAMEWORK"
-    
-    # macOS and iOS device only
-    echo "Creating XCFramework with macOS and iOS device..."
-    xcodebuild -create-xcframework \
-        -framework "$MAC_FRAMEWORK" \
-        -framework "$IOS_FRAMEWORK" \
-        -output "../SentencePiece.xcframework"
-        
-    # Clean up temporary frameworks  
-    rm -rf temp-frameworks
-else
-    # macOS only
-    echo "Creating XCFramework with macOS only..."
-    echo "Warning: iOS libraries not found. Building macOS-only XCFramework."
-    xcodebuild -create-xcframework \
-        -framework "$MAC_FRAMEWORK" \
-        -output "../SentencePiece.xcframework"
-        
-    # Clean up temporary framework
-    rm -rf temp-frameworks
-fi
+# Create XCFramework with all three platforms
+echo "Creating XCFramework with macOS arm64, iOS arm64, and iOS Simulator arm64..."
+xcodebuild -create-xcframework \
+    -framework "$MAC_FRAMEWORK" \
+    -framework "$IOS_FRAMEWORK" \
+    -framework "$IOS_SIM_FRAMEWORK" \
+    -output "../SentencePiece.xcframework"
 
-echo "✅ SentencePiece.xcframework created successfully!"
+# Clean up temporary frameworks
+rm -rf temp-frameworks
+
+echo "SentencePiece.xcframework created successfully!"
