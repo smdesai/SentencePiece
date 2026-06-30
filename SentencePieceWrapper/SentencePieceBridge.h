@@ -48,6 +48,7 @@ void sentencepiece_destroy(SentencePieceProcessor processor);
 void sentencepiece_free_processor(SentencePieceProcessor processor);
 void sentencepiece_free_pieces(char** pieces, int count);
 void sentencepiece_free_ids(int* ids);
+void sentencepiece_free_string(char* string);
 
 #ifdef __cplusplus
 }

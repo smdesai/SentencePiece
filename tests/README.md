@@ -17,7 +17,7 @@ Swift test program demonstrating the SentencePieceNative wrapper.
 ```
 
 This test:
-- Loads a SentencePiece model from `models/sentencepiece.bpe.model`
+- Loads a SentencePiece model from `models/tokenizer.model`
 - Tokenizes various test inputs (English, Unicode, emoji, Chinese)
 - Encodes text to token IDs
 - Decodes IDs back to text
@@ -38,9 +38,25 @@ python tests/test_python_sentencepiece.py
 pip install sentencepiece
 ```
 
+### SentencePieceCLI.swift
+
+A lightweight Swift CLI that mirrors the Python test behavior for a single input.
+
+**Build:**
+```bash
+./build_sentencepiece_cli.sh
+```
+
+**Run:**
+```bash
+tests/sentencepiece_cli models/tokenizer.model "Hello world"
+```
+
+This prints the original text, the token pieces, token IDs, and the decoded text using the supplied model.
+
 ## Test Model
 
-The tests use a BPE model located at `models/sentencepiece.bpe.model`. This is a pre-trained SentencePiece model with a vocabulary size of 250,000 tokens.
+The tests use a SentencePiece model located at `models/tokenizer.model`.
 
 ## Adding Your Own Tests
 

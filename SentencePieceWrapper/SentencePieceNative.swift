@@ -2,12 +2,7 @@
 //  SentencePieceNative.swift
 //  Native Swift wrapper for Google's SentencePiece
 //
-//  Usage:
-//  1. Install SentencePiece: brew install sentencepiece
-//  2. Add to build settings:
-//     - Header Search Paths: /opt/homebrew/include (Apple Silicon) or /usr/local/include (Intel)
-//     - Library Search Paths: /opt/homebrew/lib (Apple Silicon) or /usr/local/lib (Intel)
-//     - Other Linker Flags: -lsentencepiece -lc++
+//  Uses the C bridge exported by SentencePiece.xcframework.
 //
 
 import Foundation
@@ -47,6 +42,9 @@ fileprivate func sentencepiece_free_pieces(_ pieces: UnsafeMutablePointer<Unsafe
 @_silgen_name("sentencepiece_free_ids")
 fileprivate func sentencepiece_free_ids(_ ids: UnsafeMutablePointer<Int32>)
 
+@_silgen_name("sentencepiece_free_string")
+fileprivate func sentencepiece_free_string(_ string: UnsafeMutablePointer<CChar>)
+
 /// Native Swift wrapper for Google's SentencePiece
 public class SentencePieceNative: PreTrainedTokenizerModel {
     private let processor: OpaquePointer
@@ -74,7 +72,7 @@ public class SentencePieceNative: PreTrainedTokenizerModel {
         guard let decoded = sentencepiece_decode_ids(processor, ids32, Int32(ids32.count)) else {
             return ""
         }
-        defer { free(decoded) }
+        defer { sentencepiece_free_string(decoded) }
         return String(cString: decoded)
     }
     

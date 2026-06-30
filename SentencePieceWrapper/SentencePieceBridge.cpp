@@ -123,4 +123,10 @@ void sentencepiece_free_ids(int* ids) {
     }
 }
 
+void sentencepiece_free_string(char* string) {
+    if (string) {
+        free(string);
+    }
+}
+
 } // extern "C"

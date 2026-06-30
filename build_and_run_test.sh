@@ -12,15 +12,9 @@ if [ ! -d "SentencePiece.xcframework" ]; then
     exit 1
 fi
 
-# Check if the bridge source exists
-if [ ! -f "SentencePieceWrapper/SentencePieceBridge.cpp" ]; then
-    echo "❌ SentencePieceBridge.cpp not found!"
-    exit 1
-fi
-
 # Check if test model exists
-if [ ! -f "models/sentencepiece.bpe.model" ]; then
-    echo "❌ Test model not found at models/sentencepiece.bpe.model"
+if [ ! -f "models/tokenizer.model" ]; then
+    echo "❌ Test model not found at models/tokenizer.model"
     exit 1
 fi
 
@@ -32,21 +26,24 @@ else
     FRAMEWORK_PATH="SentencePiece.xcframework/macos-arm64_x86_64/SentencePiece.framework"
 fi
 
-# Step 1: Compile the C++ bridge to object file
-echo "Compiling C++ bridge..."
-clang++ -c SentencePieceWrapper/SentencePieceBridge.cpp \
-        -I SentencePieceWrapper \
-        -I "${FRAMEWORK_PATH}/Headers" \
-        -o SentencePieceWrapper/SentencePieceBridge.o
+if [ ! -f "${FRAMEWORK_PATH}/Headers/SentencePieceBridge.h" ]; then
+    echo "❌ Framework is missing SentencePieceBridge.h"
+    echo "Please run ./build_sentencepiece_framework.sh first"
+    exit 1
+fi
 
-# Step 2: Compile Swift and link with the C++ object file
+MODULE_CACHE=$(mktemp -d .swift-module-cache.XXXXXX)
+trap 'rm -rf "$MODULE_CACHE"' EXIT
+
+# Compile Swift and link with the self-contained framework.
 echo "Compiling Swift and linking..."
 swiftc -F SentencePiece.xcframework/macos-arm64_x86_64 \
        -framework SentencePiece \
        -I SentencePieceWrapper \
+       -module-cache-path "$MODULE_CACHE" \
+       SentencePieceWrapper/TokenizerSupport.swift \
        SentencePieceWrapper/SentencePieceNative.swift \
        tests/test_sentencepiece_xcframework.swift \
-       SentencePieceWrapper/SentencePieceBridge.o \
        -Xlinker -lc++ \
        -Xlinker -rpath \
        -Xlinker @executable_path \
@@ -61,5 +58,4 @@ echo ""
 ./tests/test_sentencepiece
 
 # Clean up
-rm -f tests/test_sentencepiece
-rm -f SentencePieceWrapper/SentencePieceBridge.o
+#rm -f tests/test_sentencepiece

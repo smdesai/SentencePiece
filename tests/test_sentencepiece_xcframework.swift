@@ -1,30 +1,11 @@
 import Foundation
 
-// Minimal protocol definitions (normally these would come from a tokenizer package)
-protocol PreTrainedTokenizerModel {
-    var unknownTokenId: Int? { get }
-    var unknownToken: String? { get }
-    func tokenize(text: String) -> [String]
-    func encode(text: String) -> [Int]
-    func convertTokenToId(_ token: String) -> Int?
-    func convertIdToToken(_ id: Int) -> String?
-    var vocabSize: Int { get }
-}
-
-struct Config {}
-
-enum TokenizerError: Error {
-    case missingVocab
-}
-
-// SentencePieceNative will be compiled alongside this file
-// No import needed when compiling together
-
 // Test program using the high-level wrapper
 @main
 struct SentencePieceTest {
     static func main() {
-        let modelPath = "models/sentencepiece.bpe.model"
+        //let modelPath = "models/sentencepiece.bpe.model"
+        let modelPath = "models/tokenizer.model"
 
         guard let tokenizer = try? SentencePieceNative(modelPath: modelPath) else {
             print("Failed to create tokenizer")
@@ -44,7 +25,18 @@ struct SentencePieceTest {
             "Mixed emoji 😀 text",
             "  spaces  ",
             "\n\nnewlines\n\n",
-            "代码测试"
+            "代码测试",
+            "Saoirse",
+            "Ronan",
+            "Timotee",
+            "Chalamet",
+            "Wojciechowski",
+            "Xarelto",
+            "VR",
+            "Zyrtec",
+            "Siobhan",
+            "Schaumburg",
+            "Häagen-Dazs",
         ]
 
         print("Swift SentencePiece Test Results:")
