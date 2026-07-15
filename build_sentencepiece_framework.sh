@@ -304,9 +304,28 @@ create_platform_framework() {
 PLIST
 }
 
+# macOS frameworks must use the versioned bundle layout (Versions/A + symlinks),
+# NOT the shallow iOS-style layout. Otherwise embedding into a macOS .app fails with
+# "expected Versions/Current/Resources/Info.plist since the platform does not use
+# shallow bundles". iOS/simulator stay shallow (correct for those platforms).
+versionize_macos_framework() {
+    local fw=$1
+    [ -e "$fw/Versions" ] && return 0
+    ( cd "$fw" || exit 1
+      mkdir -p Versions/A/Resources
+      mv Headers Modules SentencePiece Versions/A/
+      mv Info.plist Versions/A/Resources/Info.plist
+      ln -s A Versions/Current
+      ln -s Versions/Current/Headers Headers
+      ln -s Versions/Current/Modules Modules
+      ln -s Versions/Current/Resources Resources
+      ln -s Versions/Current/SentencePiece SentencePiece )
+}
+
 # Create platform-specific frameworks
 echo "Creating platform-specific frameworks..."
 create_platform_framework "$MACOS_LIB_PATH" "$MAC_FRAMEWORK"
+versionize_macos_framework "$MAC_FRAMEWORK"
 create_platform_framework "$IOS_LIB_PATH" "$IOS_FRAMEWORK"
 create_platform_framework "$IOS_SIM_LIB_PATH" "$IOS_SIM_FRAMEWORK"
 
