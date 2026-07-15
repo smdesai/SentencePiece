@@ -222,7 +222,7 @@ cat > "${FRAMEWORK_DIR}/Headers/SentencePiece.h" << EOF
 #ifndef SENTENCEPIECE_H
 #define SENTENCEPIECE_H
 
-#include <SentencePieceBridge.h>
+#include "SentencePieceBridge.h"
 
 #endif /* SENTENCEPIECE_H */
 EOF
